@@ -18,5 +18,3 @@ gem "langfuse-rb"
 ## Docs
 
 Please [see our docs](docs/README.md) for detailed information on this SDK.
-
-Passing `trace_id:` to `Langfuse.observe` or `Langfuse.start_observation` starts a parentless root with that ID. See [custom trace IDs](docs/TRACING.md#custom-trace-ids) for deterministic IDs, nesting, and sampling behavior.
