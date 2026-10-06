@@ -6,6 +6,7 @@ require "base64"
 require_relative "masking_exporter"
 require_relative "trace_export_guard"
 require_relative "resilient_metrics_reporter"
+require_relative "root_span_id_generator"
 
 module Langfuse
   # OpenTelemetry initialization and setup for Langfuse tracing.
@@ -76,6 +77,22 @@ module Langfuse
         !@tracer_provider.nil?
       end
 
+      # Start an actual root through the internal provider's ID generator, so
+      # native root sampling sees an invalid parent rather than a sampled placeholder.
+      #
+      # @param name [String] Span name
+      # @param otel_tracer [OpenTelemetry::SDK::Trace::Tracer] Internal provider's tracer
+      # @param trace_id [String] Validated binary W3C trace ID
+      # @param start_time [Time, Integer, nil] Optional start time
+      # @param id_generator [RootSpanIdGenerator] ID generator captured with the tracer
+      # @return [OpenTelemetry::SDK::Trace::Span, OpenTelemetry::Trace::Span] The created span
+      # @api private
+      def start_root_span(name, otel_tracer:, trace_id:, id_generator:, start_time: nil)
+        id_generator.with_trace_id(trace_id) do |context|
+          otel_tracer.start_span(name, with_parent: context, start_timestamp: start_time)
+        end
+      end
+
       private
 
       def existing_provider_for(config)
@@ -122,7 +139,7 @@ module Langfuse
         )
 
         OpenTelemetry::SDK::Trace::TracerProvider
-          .new(sampler: build_sampler(config.sample_rate))
+          .new(sampler: build_sampler(config.sample_rate), id_generator: RootSpanIdGenerator.new)
           .tap { |provider| provider.add_span_processor(processor) }
       end
 
