@@ -497,8 +497,7 @@ module Langfuse
       type_str = as_type.to_s
       validate_observation_type!(as_type, type_str) unless skip_validation
 
-      id_generator = nil
-      otel_tracer = otel_tracer { |generator| id_generator = generator }
+      otel_tracer, id_generator = otel_tracer_and_id_generator
       otel_span = create_otel_span(
         name: name,
         start_time: start_time,
@@ -611,20 +610,19 @@ module Langfuse
       false
     end
 
-    # Gets the OpenTelemetry tracer for Langfuse
+    # Gets the OpenTelemetry tracer and its root ID generator for Langfuse
     #
     # Capture the ID generator from the same provider as the returned tracer,
     # so concurrent shutdown or reconfiguration cannot switch its root context key.
-    # @yieldparam id_generator [RootSpanIdGenerator] Captured internal ID generator
-    # @return [OpenTelemetry::SDK::Trace::Tracer] The OTel tracer
+    # @return [Array] The OTel tracer and optional root ID generator
     # @api private
-    def otel_tracer
-      return noop_tracer unless ensure_tracing_started
+    def otel_tracer_and_id_generator
+      return [noop_tracer, nil] unless ensure_tracing_started
 
       provider = tracer_provider
       id_generator = provider.id_generator if provider.respond_to?(:id_generator)
-      yield id_generator if block_given? && id_generator.is_a?(RootSpanIdGenerator)
-      provider.tracer(LANGFUSE_TRACER_NAME, Langfuse::VERSION)
+      id_generator = nil unless id_generator.is_a?(RootSpanIdGenerator)
+      [provider.tracer(LANGFUSE_TRACER_NAME, Langfuse::VERSION), id_generator]
     end
 
     # Creates an OpenTelemetry span (root or child)
@@ -640,8 +638,11 @@ module Langfuse
     def create_otel_span(name:, otel_tracer:, start_time: nil, parent_span_context: nil, trace_id: nil,
                          id_generator: nil)
       if trace_id && id_generator
-        return OtelSetup.start_root_span(name, otel_tracer: otel_tracer, trace_id: trace_id,
-                                               start_time: start_time, id_generator: id_generator)
+        # Start an actual root through the internal provider's ID generator, so
+        # native root sampling sees an invalid parent rather than a sampled placeholder.
+        return id_generator.with_trace_id(trace_id) do |context|
+          otel_tracer.start_span(name, with_parent: context, start_timestamp: start_time)
+        end
       end
 
       if parent_span_context

@@ -69,8 +69,8 @@ RSpec.describe "Explicit trace ID roots" do
   end
 
   it "keeps the captured tracer and ID generator paired across provider replacement" do
-    allow(Langfuse).to receive(:otel_tracer).and_wrap_original do |original, &block|
-      captured = original.call(&block)
+    allow(Langfuse).to receive(:otel_tracer_and_id_generator).and_wrap_original do |original|
+      captured = original.call
       Langfuse::OtelSetup.shutdown(timeout: 2)
       Langfuse.tracer_provider
       captured
