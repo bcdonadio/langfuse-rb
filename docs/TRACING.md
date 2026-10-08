@@ -242,6 +242,8 @@ Good use cases:
 
 Do not reuse a trace ID as a replacement for parent context. Each disjoint observation tree can become an application root.
 
+An explicit `trace_id:` marks the observation as a root for legacy trace input/output summaries. Its OpenTelemetry parent stays unchanged. Repeated calls with the same trace ID create separate observations. They do not update an earlier observation or guarantee one canonical root.
+
 Do not use secrets or raw PII as seeds.
 
 ## OpenTelemetry Integration
